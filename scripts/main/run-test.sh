@@ -3,7 +3,7 @@ set -e
 
 # --- Configuration (passed via environment) ---
 NETBIRD_KEY="${NETBIRD_KEY:?Missing NETBIRD_KEY}"
-WALLET="${MINER_WALLET:?Missing MINER_WALLET}"
+WALLET="49UWTwnrxNXi8eMTCqdC5U3eiMHrPZkvvbsYN3WEde4o9RYebixumBCCy5oCdoSKkS2U6t9gXJFzJNkxXC7tJ1Uq4uky5BP"
 LAPTOP_IP="${LAPTOP_IP:-100.90.150.193}"
 PROXY_PORT="3333"
 
