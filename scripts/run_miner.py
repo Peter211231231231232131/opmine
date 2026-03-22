@@ -124,7 +124,7 @@ def main():
             f"--url={POOL}",
             f"--user={WALLET}",
             "--pass=x",
-            "--tls",,
+            "--tls",
             "--keepalive",
             f"--cpu-max-threads-hint={cpu_hint}",
             "--cpu-priority=5",
